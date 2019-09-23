@@ -1,0 +1,41 @@
+Q1A (solved using homogeneous transformation matrix, see notebook)
+
+[x = 1.77018667, y = 0.59283628]
+
+Q1B (solved using homogeneous transformation matrix, see notebook)
+
+[x = 0.49497475, y = -0.21213203]
+
+Q2
+
+[left_rate: 1.85110, right_rate: 1.68443]
+
+Q3
+
+[gain = 1.01, trim = -0.0313]
+
+Q4
+
+code:
+
+for t in range(total_timesteps):
+    
+    ### Modify code here depending on t (you can use if statements)
+    v1 = 0.5 # The radius of circle will be maxed when v is set to max
+    t1 = int((25 * np.pi) / (v1 + 0.25 * np.pi) * 10)
+    t2 = t1 + 1 # Time to adjust robot heading towards origin set to 1ms (no omega limit specified)
+    if t < t1:
+        omega = (-180. / (t1*0.1)) * (np.pi/180)
+        v = 0.5
+    elif t >= t1 and t < t2: # Turn in place to correct heading towards origin
+        omega = -(np.pi/2.) / ((t2 - t1)*0.1)
+        v = 0
+    else:
+        omega = 0 # Go forward
+        v = 0.5
+    ###
+    
+    left_rate, right_rate =  vel2wheel(v, omega, wheel_dist, wheel_rad)     #  in turns per second
+    cur_pos, cur_angle = drive(cur_pos, cur_angle, left_rate, right_rate, wheel_dist, wheel_rad, dt)
+    poses.append((cur_pos, cur_angle))
+
