@@ -6,7 +6,7 @@ class Controller():
         self.gain = 2.0
         pass
 
-    def angle_control_commands(self, dist, angle):
+    def angle_control_commands(self, dist, angle, k_theta):
         # Return the angular velocity in order to control the Duckiebot so that it follows the lane.
         # Parameters:
         #     dist: distance from the center of the lane. Left is negative, right is positive.
@@ -22,6 +22,19 @@ class Controller():
         #
         # YOUR CODE HERE
         #
+        v = 0.5
+        # k_theta = 0.1
+        theta_threshold = np.pi / 6.
+        kd = -(k_theta**2) / (4*v)
+        d_threshold = abs((k_theta * theta_threshold) / kd)
+        if dist < d_threshold:
+            sat = -d_threshold
+        elif dist > d_threshold:
+            sat = d_threshold
+        else:
+            sat = dist
+        omega = (kd * sat) + (k_theta * angle)
+
         #######
         
         return  omega
