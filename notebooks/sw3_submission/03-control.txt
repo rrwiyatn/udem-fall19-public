@@ -1,0 +1,29 @@
+Part 1: PID
+
+The differences between the three terms are:
+
+(P)roportional: the term that contributes to the control signal which is proportional to the error signal.
+
+(I)ntegral: the term that contributes to the control signal which is proportional to the integral of the error signal.
+
+(D)erivative: the term that contributes to the control signal which is proportional to the derivative of the error signal.
+
+Error terms involved in the correction and types of applications they are commonly used for:
+
+1. P controller: this controller only considers directly the error signal that it observes at certain point of time, and issues a control signal by multiplying the error with the proportional gain Kp. This controller is usually used for ...
+
+2. PI controller: this controller considers the error signal that it observes at certain point of time and the acummulated error over time. The controller issues a control signal by calculating Kp * e + Ki * int_term, where int_term is the integral of the error from initial time to the current time. This controller is usually used for ...
+
+3. PD controller: this controller considers the error signal that it observes at certain point of time and how the error changes between the current time step and previous time step. The controller issues a control signal by calculating Kp * e + Kd * ((e_t - e_{t-1}) / dt), where e_t denotes the error at time equals t. This controller is usually used for temperature control at home where it does not impose a great risk when the temperature is slightly off when the controller is in steady state.
+
+4. ID controller: this controller considers the acummulated error over time, and how the error changes between the current time step and previous time step. This controller may exist, but it does not do anything useful in terms of driving the error to zero. Note that the D term only responds to change in error, while the I term responds to the accumulated error over time. 
+
+5. PID controller: this controller considers the error signal that it observes at certain point of time, how the error changes over time, and the acummulated error over time. The controller issues a control signal by calculating Kp * e + Ki * int_term + Kd * ((e_t - e_{t-1}) / dt). This controller is usually used for ...
+
+
+
+Part 2: Pure Pursuit
+
+How does the look-ahead distance affect performance? What does a small look-ahead distance prioritize? What about a larger one?
+Answer: Small look-ahead distance prioritizes to reach the path quickly, but increases the possibility of overshooting/oscillation along path. Larger look-ahead distance reduces overshooting/oscillation but does not work well at sharp corners as it will skip the points near these corners.
+
