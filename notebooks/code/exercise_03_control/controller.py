@@ -4,9 +4,7 @@ import time
 class Controller():
     def __init__(self):
         self.gain = 2.0
-        self.last_time = None
-        self.last_error_dist = None
-        self.last_error_angle = None
+        # self.last_error_dist = None
         self.integral_term = 0.0
         pass
 
@@ -27,7 +25,7 @@ class Controller():
         # YOUR CODE HERE
         #
         v = 0.5
-        k_theta = 5.0
+        k_theta = 10.0
         theta_threshold = np.pi / 6.
         kd = -(k_theta**2) / (4.*v)
         d_threshold = abs((k_theta * theta_threshold) / kd)
@@ -54,48 +52,24 @@ class Controller():
         # Outputs:
         #     omega: angular velocity, in rad/sec. Right is negative, left is positive.
         current_time = time.time()
-        if self.last_time is None:
-            self.last_time = current_time
-            v = 0.5
-            k_theta = 5.0
-            theta_threshold = np.pi / 6.
-            kd = -(k_theta**2) / (4.*v)
-            d_threshold = abs((k_theta * theta_threshold) / kd)
-            if dist < -d_threshold:
-                sat = -d_threshold
-            elif dist > d_threshold:
-                sat = d_threshold
-            else:
-                sat = dist
-            error_dist = -sat
-            error_angle = angle
-            self.last_error_dist = error_dist
-            self.last_error_angle = error_angle
-            omega = (kd * error_dist) + (k_theta * error_angle)
+        v = 0.5
+        k_theta = 10.0
+        ki = 0.5
+        theta_threshold = np.pi / 6.
+        kd = -(k_theta**2) / (4.*v)
+        d_threshold = abs((k_theta * theta_threshold) / kd)
+        if dist < -d_threshold:
+            sat = -d_threshold
+        elif dist > d_threshold:
+            sat = d_threshold
         else:
-            dt = current_time - self.last_time
-            self.last_time = current_time
-            v = 0.5
-            k_theta = 5.0
-            ki = 0.2
-            theta_threshold = np.pi / 6.
-            kd = -(k_theta**2) / (4.*v)
-            d_threshold = abs((k_theta * theta_threshold) / kd)
-            if dist < -d_threshold:
-                sat = -d_threshold
-            elif dist > d_threshold:
-                sat = d_threshold
-            else:
-                sat = dist
-            error_dist = -sat
-            error_angle = angle
-            # derivative_term_dist = (error_dist - self.last_error_dist) / dt
-            # derivative_term_angle = (error_angle - self.last_error_angle) / dt
-            self.integral_term += (error_dist * dt)
-            # self.integral_term += (error_angle * dt)
-            omega = (kd * error_dist) + (k_theta * error_angle) + (ki * self.integral_term)
-            self.last_error_dist = error_dist
-            self.last_error_angle = error_angle
+            sat = dist
+        error_dist = -sat
+        error_angle = angle
+        # self.last_error_dist = error_dist
+        self.integral_term += sat
+        omega = (kd * error_dist) + (k_theta * error_angle) + (ki * self.integral_term)
+        # omega = (kd * error_dist) + (ki * self.integral_term)
         return omega
     
 
@@ -141,18 +115,16 @@ class Controller():
         #
         #TODO 2: Modify omega
         #
-        ########
-        # e = curve_point # crosstrack error
-        # R = (lookup_distance**2) / (2*e) # radius of curvature
-        # alpha = np.arcsin(lookup_distance / (2 * R)) 
-        # omega = (2 * 0.5 * np.sin(alpha)) / lookup_distance
+        ######## 
         duck_to_point = curve_point - pos
         dist = np.linalg.norm(duck_to_point)
         unit_duck_to_point = duck_to_point / dist
-        dir_unit_vector = np.array([np.cos(angle), 0, np.sin(angle)])
-        alpha = np.arccos(np.dot(dir_unit_vector,unit_duck_to_point))
+        dir_unit_vector = np.array([np.sin(angle), 0, np.cos(angle)])
+        alpha = np.arccos(np.dot(dir_unit_vector, unit_duck_to_point))
+        K = 0.2
+        omega = -(np.cos(alpha)) / (K) # Scaling dist with speed
         v = 0.5
-        omega = -(2 * v * np.sin(alpha)) / lookup_distance
+        
         
 
         return v, omega
