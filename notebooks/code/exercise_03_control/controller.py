@@ -71,6 +71,14 @@ class Controller():
         omega = (kd * error_dist) + (k_theta * error_angle) + (ki * self.integral_term)
         # omega = (kd * error_dist) + (ki * self.integral_term)
         return omega
+
+    def wrap_angle(self, angle):
+        new_angle = angle % (np.pi * 2)
+        if new_angle < 0:
+            new_angle = new_angle + (2 * np.pi)
+        elif new_angle >= np.pi:
+            new_angle = new_angle - (2 * np.pi)
+        return new_angle
     
 
     def pure_pursuit(self, env, pos, angle, follow_dist=0.25):
@@ -98,7 +106,7 @@ class Controller():
         while iterations < 10:            
             ########
             #
-            #TODO 1: Modify follow_point so that it is a function of closest_point, closest_tangent, and lookup_distance
+            # TODO 1: Modify follow_point so that it is a function of closest_point, closest_tangent, and lookup_distance
             #
             ########
             follow_point = closest_point + (lookup_distance * closest_tangent)
@@ -116,15 +124,21 @@ class Controller():
         #TODO 2: Modify omega
         #
         ######## 
-        duck_to_point = curve_point - pos
-        dist = np.linalg.norm(duck_to_point)
-        unit_duck_to_point = duck_to_point / dist
-        dir_unit_vector = np.array([np.sin(angle), 0, np.cos(angle)])
-        alpha = np.arccos(np.dot(dir_unit_vector, unit_duck_to_point))
+        # angle = -angle
+        duck_to_point = curve_point - pos # (x,y,z)
+        dist = np.linalg.norm(duck_to_point) # a scalar
+        unit_duck_to_point = duck_to_point / dist # (x,y,z)
+        z_comp = duck_to_point[2]
+        x_comp = duck_to_point[0]
+        angle_between_x_axis_and_target = np.arctan2(-z_comp,x_comp)
+        alpha = angle - angle_between_x_axis_and_target
+
+        #alpha = np.arccos(np.dot(dir_unit_vector, unit_duck_to_point))
         K = 0.2
-        omega = -(np.cos(alpha)) / (K) # Scaling dist with speed
+        omega = -(np.sin(alpha)) / (K) # Scaling dist with speed
         v = 0.5
         
-        
+        crosstrack_error = np.sin(alpha) * dist # For plotting crosstrack error
+        angle_error = np.arctan2(closest_tangent[2],closest_tangent[0]) - self.wrap_angle(angle) # For plotting angle error in notebook
 
-        return v, omega
+        return v, omega, crosstrack_error, angle_error
