@@ -1,47 +1,29 @@
----------------------------------------------------------------------------------------------------------
 Part 1: PID
----------------------------------------------------------------------------------------------------------
 
 The differences between the three terms are:
 
-(P)roportional: the term that contributes to the control signal which is proportional to the error signal (only cares about the error at a point in time).
+(P)roportional: the term that contributes to the control signal which is proportional to the error signal.
 
-(I)ntegral: the term that contributes to the control signal which is related to the integral of the error signal (accumulation of error over time).
+(I)ntegral: the term that contributes to the control signal which is proportional to the integral of the error signal.
 
-(D)erivative: the term that contributes to the control signal which is related to the derivative of the error signal (how the error signal in the current time step differs from the error in previous time step).
+(D)erivative: the term that contributes to the control signal which is proportional to the derivative of the error signal.
 
 Error terms involved in the correction and types of applications they are commonly used for:
 
-1. P controller: this controller only considers directly the error signal that it observes at certain point of time, and issues a control signal by multiplying the error with the proportional gain Kp. However, this controller usually experiences offset (non-zero steady state error). This controller can be used in water tank level control for constant out flow where we do not care about the offset caused by P controller. This is because, if the out flow is constant, the controller only needs to make sure that the water level to stay the same.
+1. P controller: this controller only considers directly the error signal that it observes at certain point of time, and issues a control signal by multiplying the error with the proportional gain Kp. This controller is usually used for ...
 
-2. PI controller: this controller considers the error signal that it observes at certain point of time and the acummulated error over time. The controller issues a control signal by calculating Kp * e + Ki * int_term, where int_term is the integral of the error from initial time to the current time. As a result, the addition of I term can help eliminating the offset that P controller has, so we can get zero steady-state error. Furthermore, this controller is also preferable compared to PD or PID when we know the environment or sensor is giving us noisy error signals (hence not using the D term). For example, this can be used in home temperature control system where there is non-constant heat loss.
+2. PI controller: this controller considers the error signal that it observes at certain point of time and the acummulated error over time. The controller issues a control signal by calculating Kp * e + Ki * int_term, where int_term is the integral of the error from initial time to the current time. This controller is usually used for ...
 
-3. PD controller: this controller considers the error signal that it observes at certain point of time and how the error changes between the current time step and previous time step. The controller issues a control signal by calculating Kp * e + Kd * ((e_t - e_{t-1}) / dt), where e_t denotes the error at time equals t. This controller can be used for applications where small steady state error is acceptable, for example it is used in duckietown.
+3. PD controller: this controller considers the error signal that it observes at certain point of time and how the error changes between the current time step and previous time step. The controller issues a control signal by calculating Kp * e + Kd * ((e_t - e_{t-1}) / dt), where e_t denotes the error at time equals t. This controller is usually used for temperature control at home where it does not impose a great risk when the temperature is slightly off when the controller is in steady state.
 
 4. ID controller: this controller considers the acummulated error over time, and how the error changes between the current time step and previous time step. This controller may exist, but it does not do anything useful in terms of driving the error to zero. Note that the D term only responds to change in error, while the I term responds to the accumulated error over time. 
 
-5. PID controller: this controller considers the error signal that it observes at certain point of time, how the error changes over time, and the acummulated error over time. The controller issues a control signal by calculating Kp * e + Ki * int_term + Kd * ((e_t - e_{t-1}) / dt). This controller is usually used in cruise control.
+5. PID controller: this controller considers the error signal that it observes at certain point of time, how the error changes over time, and the acummulated error over time. The controller issues a control signal by calculating Kp * e + Ki * int_term + Kd * ((e_t - e_{t-1}) / dt). This controller is usually used for ...
 
-----------------------------------------------
 
-For the first controller, a P and (approximation of) D controller was used. From the slides presented in class, we see that under the assumption of small angle, the control law is u(t) = k_d * d(t) + k_theta * theta(t), and then it was shown that when k_d = -(k_theta^2) / (4*v), where k_theta is manually chosen, we will get a critically damped system. However, it was also mentioned that this only works for small angle, so when implemented, we set a theta_threshold and calculate distance_threshold as a function of theta_threshold (d_threshold = abs(k_theta * theta_threshold / k_d)). The distance error is then clipped to be within [-d_threshold, d_threshold]. (see pd_controller.png for plot)
 
-In the second controller, a PI controller was used. When both the parameters were tuned properly, there is very little difference that can be seen. When the I term is not perfectly tuned, we can see that there is a little bit of overshooting, which is expected since the I term can introduce overshooting in the systems. To implement this, four parameters were used (kp_distancce, kp_angle, ki_distance, ki_angle), and so omega = (kp_dist * dist) + (kp_angle * angle) + (kd_dist * diff_dist_error) + (kd_angle * diff_angle_error) + (ki_dist * integral_dist) + (ki_angle * integral_angle), where diff_*_error denotes the error difference between current time step and the previous one, and integral_* denotes the accumulation of the error over time. (see pi_controller.png for plot)
-
----------------------------------------------------------------------------------------------------------
 Part 2: Pure Pursuit
----------------------------------------------------------------------------------------------------------
-
-Failure cases of PID controller: 
-1. sensitive to noise (the D term may explode),
-2. I term may take a long time to stabilize if there is a huge error reading at one point, 
-3. not for non-linear systems
 
 How does the look-ahead distance affect performance? What does a small look-ahead distance prioritize? What about a larger one?
 Answer: Small look-ahead distance prioritizes to reach the path quickly, but increases the possibility of overshooting/oscillation along path. Larger look-ahead distance reduces overshooting/oscillation but does not work well at sharp corners as it will skip the points near these corners.
 
-From running experiments by varying the lookup distance, we can see that it behaves as expected: small lookup_distance causes overshoot, large lookup_distance does not cause overshoot but the robot tries to make a turn too early. (see pure_pursuit_plots_*.png for plots, where * denotes the follow_dist value from 0.05, 0.25, and 0.50)
-
-Note: I also try to calculate my cross track error as the lateral distance between the target point and the heading (of the vehicle) vector (i.e., L * sin(alpha)), and angle error as the angle difference between the tangent vector angle and the current heading. But I also plotted the error using the ones from local_env.get_lane_pos2.
-
-Note: I also modified pure_pursuit() in controller.py to return crosstrack and angle error for the above reason.
