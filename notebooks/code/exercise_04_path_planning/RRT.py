@@ -1,6 +1,8 @@
 import random
 import math
 import matplotlib.pyplot as plt
+import numpy as np
+import copy
 
 
 class RRT_planner:
@@ -57,7 +59,12 @@ class RRT_planner:
             # You can call any of the functions defined lower, or add your own.
 
             # YOUR CODE HERE
-
+            x_rand = self.get_random_node() # Sample (x,y)
+            nearest_idx = self.get_closest_node_id(self.list_nodes, x_rand) # Find node in V that is closest to the new sampled node
+            new_node = self.extend(self.list_nodes[nearest_idx], x_rand) # Connect x_nearest and x_rand (the sampled node) s.t. the distance between the two is <= max_branch_length
+            is_collide = self.collision(new_node, self.list_obstacles) # Check if connection between x_nearest and x_rand is obstacle free
+            if is_collide == False: # If obstacle free, append new node to V, and edge to E
+                self.list_nodes.append(new_node)
             #######
 
             if show_anim and it % 5 == 0:
@@ -191,6 +198,10 @@ class RTT_Path_Follower:
     def __init__(self, path, local_env):
         self.path = path
         self.env = local_env
+        self.last_pos = None # To store the last position of the robot
+        self.last_angle = None # To store the last angle of the robot
+        self.angle_reached = False # Flag to indicate if desired angle has been reached
+        self.last_dist = math.inf # To store the last distance between robot and the next waypoint
     
     def next_action(self):
         # Current position and angle
@@ -205,6 +216,53 @@ class RTT_Path_Follower:
         #
         # YOUR CODE HERE: change v and omega so that the Duckiebot keeps on following the path
         #
+        # If first point, store the current pos and angle to the last_* variables
+        if self.last_pos is None:
+            self.last_pos = np.array([copy.deepcopy(cur_pos_x),copy.deepcopy(cur_pos_y)]) 
+            self.last_angle = copy.deepcopy(cur_angle)
+
+        # Because we are deleting the content of self.path whenever we have reached
+        # one of the waypoints, when we reach the final goal, self.path will only
+        # contain the initial position of the robot before it followed the trajectory
+        # so we can just delete it
+        if len(self.path) <= 1:
+            del self.path[0] # delete the initial position of the robot
+            v = 0.
+            omega = 0.
+            return v, omega 
+
+        # Calculate angle error
+        x_diff = self.path[-2][0] - self.last_pos[0]
+        y_diff = self.path[-2][1] - self.last_pos[1]
+        desired_angle = np.arctan2(-y_diff,x_diff)
+        error_angle = cur_angle%(2*np.pi) - desired_angle%(2*np.pi)
+        angle_tolerance = 0.05 # If angle error is below this number, assume to have reached desired angle
+        dist_tolerance = 0.02 # If distance error is below this number, assume to have reached desired position
+
+        # If robot is not facing the waypoint, rotate the robot until it is
+        if self.angle_reached == False and (math.fabs(error_angle) > angle_tolerance):
+            v = 0. # Set v = 0, so the robot does not move but only rotating
+            omega = -error_angle # Adjust omega to be proportional to the angle error
+        elif self.angle_reached == False and (math.fabs(error_angle) <= angle_tolerance): # If angle has been reached, turn the flag on
+            self.angle_reached = True # Flag if the robot is facing the waypoint
+
+        # If robot is facing the waypoint, move forward, do not turn anymore
+        if self.angle_reached:
+            pos = np.array([cur_pos_x,cur_pos_y]) # Current position of robot
+            dist =  np.linalg.norm(self.path[-2] - pos) # Current distance to waypoint from robot's current position
+            if dist > dist_tolerance and self.last_dist > dist:
+                omega = 0. # Set omega to 0 so it doesn't turn
+                v = dist # Adjust velocity to be proportional to the distance left
+                self.last_dist = copy.deepcopy(dist) # Update lst distance between robot and target waypoint
+            else: # If the robot has reached the waypoint
+                omega = 0.
+                v = 0.
+                # Reset all the last_* variables and angle_reached flag
+                self.last_pos = np.array([copy.deepcopy(cur_pos_x),copy.deepcopy(cur_pos_y)]) 
+                self.last_angle = copy.deepcopy(cur_angle)
+                self.angle_reached = False
+                self.last_dist = math.inf
+                del self.path[-2] # Remove the waypoint that we just reached
         #######
         
         return v, omega
