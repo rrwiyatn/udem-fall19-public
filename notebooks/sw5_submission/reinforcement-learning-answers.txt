@@ -1,0 +1,93 @@
+##############################
+Question 0: After understanding the above computed reward, experiment with the constants for each component. What type of behavior does the above reward function penalize? Is this good or bad in context of autonomous driving? Name some other issues that can arise with single-objective optimization. In addition, give three sets of constants and explain qualitatively what types of behavior each penalizes or rewards (note, you may want to use a different action policy than random).
+##############################
+
+The rewards encourage the agent to move as fast as possible (speed) in the correct direction, and penalizes for collision and crosstrack error. In other words, the agent (or car) will receive a big reward as long as it moves as fast as possible in the correct direction without colliding into objects or going out of lanes. This is bad in the context of autonomous driving. For example, these rewards do not consider comfort, and as a result the movement of the vehicle is likely to be be very jerky and may cause motion sickness to the passenger, and may impose danger to other drivers on the road. In addition, these rewards do not consider the rules of the road such as road sign violations. A disadvantage of single-objective optimization is that we do not know how the terms are combined together, and cannot offer alternate solutions. In practice, often times multiple solutions are preferred so that the agent can pick one depending on the situation that the agent is currently in.
+
+Concretely, we can consider the following:
+
+Setting 1: using only the (speed * lp.dot_dir) as the reward, and setting other terms to 0, the vehicle is expected to move as fast as possible in the right direction without worrying about collision and crosstrack error, so it may bump to obstacles and not drive on the proper lane.
+
+Setting 2: using both (speed * lp.dot_dir) and (np.abs(lp.dist)) while setting the constant for collision to be 0, will encourage the vehicle to move in the right direction while following the center of the lane.
+
+Setting 3: using both (speed * lp.dot_dir) and (col_penalty) while setting the constant for (np.abs(lp.dist)) to be 0, will encourage the vehicle to move fast in the right direction and being very careful not to collide with objects, while not caring at all about being in the center of the lane.
+
+Setting 4: if constant (speed * lp.dot_dir) set to 0 and others are not, the agent may just choose to stop in the middle of the lane and not move since it already satisfies the objective.
+
+
+##############################
+Section 1:
+##############################
+
+List of bugs:
+1. Critic should output a scalar and does not need to apply tanh to the output.
+    - In `class Critic(nn.Module)`, in `__init__`, replace `self.lin2 = nn.Linear(100, action_dim)` with `self.lin2 = nn.Linear(100, 1)`
+    - In `class Critic(nn.Module)`, in `__init__`, comment out `self.max_action = max_action`
+    - In `class Critic(nn.Module)`, in `def forward()`, comment out `x = self.max_action * self.tanh(x)`
+2. Need to detach target_Q in `class DDPGAgent(object)` (i.e., in def train()) (see explanation below in the challenge question)
+3. No target networks to stabilize the training, need to use target actor and target critic networks when generating the target for the critic. Also needs to add the parameter tau for the soft update.
+4. Value of timesteps. In the code, `start_timesteps = 1e4`, which is bigger than `max_timesteps = 500`. This means, the statement within `if total_timesteps < start_timesteps` is always executed.
+5. Others:
+    - replace `self.lr` with `self.relu`
+    - `flat_size = 31968`
+    - in DDPGAgent class, inside `__init__()`, need to add `self.flat = False`
+
+a) Read some literature on actor-critic methods, including the original actor-critic paper. What is an issue that you see related to non-stationarity? Define what non-stationarity means in the context of machine learning and how it relates to actor-critic methods. In addition, give some hypotheses on why reinforcement learning is much more difficult (from an optimization perspective) than supervised learning, and how the answer to the previous question and this one are related.
+
+Answer:
+
+Non-stationarity in machine learning usually refers to the phenomenon where data generation distribution changes over time. In supervised learning, we usually assume i.i.d. data, which is not necessarily true when training RL agent, which makes the problem harder to solve. For example, we often deal with sequence of states that are correlated to each other, and the data distribution changes as we update the agent's policy. In addition, some RL algorithms use reward that is only received at the end of the episode (i.e., we are facing a long delay between taking an action and actually receiving feedback from taking that action), which is completely different compared to supervised learning where the model receives feedback directly whenever the model makes a prediction. In actor-critic, the issue that is related to non-stationarity is due to change in data distribution as we update the policy (actor), as the calculation of the TD target for the critic relies on the prediction of the next action from the actor.
+
+b) What role does the replay buffer play in off-policy reinforcement learning? It's most important parameter is max_size - how does changing this value (answer for both increasing and decreasing trends) qualitatively affect the training of the algorithm?
+
+Answer:
+
+Replay buffer is a record of past experiences (state, actions, rewards, next state), as a result, the agent can try to learn again using these past experiences. This is important in RL since unlike supervised learning, RL agents learn by observing rewards that it gets by interacting with the environment. This is used mainly so that the data used to train the RL agent is i.i.d. (by not continuously learning from consecutive observations, and especially since these consecutive samples depend on the agent's current parameters), or in other words it decorrelates the sequence of observations. Increasing max size will improve data efficiency (in the sense that the agent does not need to keep gathering new experiences) make it less likely for us to sample correlated samples thus will lead to more stable training but comes with the cost of memory issue and slower training. It may also make the task overly complex if the buffer is too large so it may also lead to not being able to reach optimal solution. Decreasing its size will make it more memory efficient, but less stable training due to more correlated samples. Thus, one needs to carefully pick the right size for the replay buffer (Zhang & Sutton, 2018 - "A Deeper Look at Experience Replay").
+
+c) Challenge Question: Briefly, explain how automatic differentiation works. In addition, expand on the difference between a single-element tensor (that requires_grad) and a scalar value as it relates to automatic differentiation; when do we want to backpropogate through a single-element tensor, and when do we not? Take a close look at the code and how losses are being backpropogated. On paper or your favorite drawing software, draw out the actor-critic architecture as described in the code, and label how the actor and critic losses are backpropagated. On your diagram, highlight the particular loss that will cause issues with the above code, and fix it.
+
+Answer:
+
+Automatic differentiation is a way of automatically generating procedures to compute the derivatives of some value that is computed by a computer program. Automatic differentiation works by first building the computational graph where each operation is a node on the graph, where each node is usually made of basic operation. We can then calculate the partial derivatives at each of the edges in the graph. Once done, we can compute the partial derivative of a variable with any other variable in the graph by using chain rule. One needs to be careful when differentiating the loss, in the case of actor-critic model, one needs to pay extra attention on the critic loss. This is because the target for the critic loss (i.e., TD target) is generated using the critic network itself (i.e., target_Q in the code). If we do not detach the target_Q, then there are two paths that contribute to the gradient of the Q network, where ideally, we would want whatever produces the TD target to be "fixed". Thus, in this case, we should detach target_Q before backpropogation (see diagram.jpeg).
+
+##############################
+Theoretical Component
+##############################
+
+##############################
+Section 2 - We discussed a case study of DQN in class. The original authors used quite a few tricks to get this to work. Detail some of the following, and explain what problem they solve in training the DQN:
+##############################
+
+a) Target Networks
+
+In order to stabilize the training, to train the DQN, the authors proposed to have a copy of the network (which is created every some fixed number of steps) called the "Target" network to generate the targets for the Q network. In other words, we are generating the targets to update the latest parameters by using the old parameters. This is done to prevent oscillations of the policy, and according to Mnih et al (2015), this also help to reduce correlations with the target. This is because, the "target" for our network depends on the network itself. By fixing the target using the target network, we can have more well-defined optimization problem. Note that this is not a problem in standard TD learning when we store Q values as a table/matrix. This becomes a problem when we parametrize Q, which in this case is using a neural network, since now both the prediction and the target rely on the same parameters.
+
+b) Annealed Learning Rates
+
+Skipped.
+
+c) Replay Buffer
+
+Like discussed in  Section 1, replay buffer is a record of past experiences (state,actions,rewards,next state), as a result, the agent can try to learn again using these past experiences. This is important in RL since unlike supervised learning, RL agents learn by observing rewards that it gets by interacting with the environment. This is used mainly so that the data used to train the RL agent is i.i.d. (by not continuously learning from consecutive observations, and especially since these consecutive samples depend on the agent's current parameters), or in other words it decorrelates the sequence of observations. Furthermore, this makes learning more to be more efficient (we can perhaps also think of this as a form of data augmentation). Increasing max size will improve data efficiency (in the sense that the agent does not need to keep gathering new experiences) make it less likely for us to sample correlated samples thus will lead to more stable training but comes with the cost of memory issue and slower training. It may also make the task overly complex if the buffer is too large so it may also lead to not being able to reach optimal solution. Decreasing its size will make it more memory efficient, but less stable training due to more correlated samples. Thus, one needs to carefully pick the right size for the replay buffer (Zhang & Sutton, 2018 - "A Deeper Look at Experience Replay").
+
+d) Random Exploration Period
+
+Random exploration period is needed so that the agent can explore more about the world, with the hope to get to a more optimal solution. To ensure exploration, since DQN is an off-policy method, the learning of optimal policy is conducted while following exploratory policy. In addition, DQN uses epsilon greedy with annealed epsilon (i.e., the epsilon decays over time from 1.0 to 0.1, or in other words, the agent is allowed to do more exploration in the beginning, and do exploitation more and more over time).
+
+e) Preprocessing the Image
+
+The preprocessing step is used to reduce the input dimensionality and to remove artefacts (i.e., flickers) from the Atari 2600 emulator. The input dimensionality reduction is needed to reduce computation and memory requirements, while the artefacts removal reduces unwanted noise (e.g., frame flickering) in the data. To remove the flickering, they take the max value of each pixel in the current and previous frames. They then take the luminance channel and rescale it to 84 x 84 to reduce the input dimensionality. The model then takes 4 most recent preprocessed images as its input.
+
+##############################
+Section 3:
+##############################
+
+Read about either TD3 or Soft Actor Critic; for your choice, summarize what problems they are addressing with the standard actor-critic formulation, and how they solve them
+
+TD3:
+
+TD3 improves the DDPG by addressing the problem of value approximation error, in particular the problem of value overestimation. This is addressed using two independent critics (so now we have 3 sets of trainable parameters instead of just 2, which includes 1 actor and 2 critics). When generating the TD targets for the critics, they then take the minimum value between pair of critics to avoid overestimating the value. The authors also suggested to delay updates on the actor, so accumulation of errors can be reduced. In practice, this means to keep updating the critic at every iteration, while only updating the actor every some fixed number of iteration. They also use clipped additive noise (i.e., such that the noise is within [-c,c]) for the action (i.e., action = policy_net(state) + clip(noise)) as smoothing regularization to reduce variance caused by function approximation error in the critic, which is a little bit different compared to DDPG where the added noise is not clipped. The tricks of using target networks (1 for actor, and 2 for critics), soft update of target networks, and replay buffer are still used in this work.
+
+Acknowledgement:
+
+I thank Fabrice Normandin, Mostafa Elaraby, and Niki Howe for the helpful discussions.
