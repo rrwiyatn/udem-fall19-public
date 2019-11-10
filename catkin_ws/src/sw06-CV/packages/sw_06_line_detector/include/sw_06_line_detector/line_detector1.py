@@ -5,7 +5,8 @@ import duckietown_utils as dtu
 import numpy as np
 import rospy
 from .line_detector_interface import Detections, LineDetectorInterface
-
+import time
+import traceback
 
 class LineDetectorHSV(dtu.Configurable, LineDetectorInterface):
     """ LineDetectorHSV """
@@ -35,26 +36,30 @@ class LineDetectorHSV(dtu.Configurable, LineDetectorInterface):
         dtu.Configurable.__init__(self, param_names, configuration)
 
     def _colorFilter(self, color):
-        # threshold colors in HSV space
-        if color == 'white':
-            bw = sw06.inRange(self.hsv, self.hsv_white1, self.hsv_white2)
-        elif color == 'yellow':
-            bw = sw06.inRange(self.hsv, self.hsv_yellow1, self.hsv_yellow2)
-        elif color == 'red':
-            bw1 = sw06.inRange(self.hsv, self.hsv_red1, self.hsv_red2)
-            bw2 = sw06.inRange(self.hsv, self.hsv_red3, self.hsv_red4)
-            bw = sw06.bitwise_or(bw1, bw2)
-        else:
-            raise Exception('Error: Undefined color strings...')
+        # threshold colors in HSV 
+        try:
+            start = time.time()
+            if color == 'white':
+                bw = sw06.inRange(self.hsv, self.hsv_white1, self.hsv_white2)
+            elif color == 'yellow':
+                bw = sw06.inRange(self.hsv, self.hsv_yellow1, self.hsv_yellow2)
+            elif color == 'red':
+                bw1 = sw06.inRange(self.hsv, self.hsv_red1, self.hsv_red2)
+                bw2 = sw06.inRange(self.hsv, self.hsv_red3, self.hsv_red4)
+                bw = sw06.bitwise_or(bw1, bw2)
+            else:
+                raise Exception('Error: Undefined color strings...')
 
-        # binary dilation
-        kernel = sw06.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                           (self.dilation_kernel_size, self.dilation_kernel_size))
-        bw = sw06.dilate(bw, kernel)
+            # binary dilation
+            kernel = sw06.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                            (self.dilation_kernel_size, self.dilation_kernel_size))
+            bw = sw06.dilate(bw, kernel)
 
-        # refine edge for certain color
-        edge_color = sw06.bitwise_and(bw, self.edges)
-
+            # refine edge for certain color
+            edge_color = sw06.bitwise_and(bw, self.edges)
+        except Exception as e:
+            traceback.print_exc()
+        print(time.time() - start)
         return bw, edge_color
 
     def _findEdge(self, gray):
