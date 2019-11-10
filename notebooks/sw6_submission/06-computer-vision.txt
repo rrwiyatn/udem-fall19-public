@@ -1,0 +1,60 @@
+####################################################################
+Question 1: Take a look at the node file src/line_detector_node.py. It is subscribed at the topic ~corrected_image/compressed and publishes ~segment_list and ~image_with_lines. What is the role of this node? Describe shortly its input and its outputs. Write your answer in a 06-computer-vision.txt file.
+
+The role of this node is to detect lines within the image, put them into a segment list. This segment list is then published so that it can be used by different nodes. The inputs are the corrected image, which is the raw image that is corrected using the calibration matrix that we did in hardware exercise 1. The outputs are the segment list which is the list containing a set of detected line segments. The line segment message includes the color of the lines (yellow, white, or red), the normalized pixel coordinates, the normals of the lines, and the points that make up the line segments. This node also outputs the image with lines, which is an image with lines overlayed on it that is useful for visualization.
+
+####################################################################
+
+Question 2: In the lane following pipeline, the ground projection node uses the outputs of the line detector. Write a short description of what the ground projection node does.
+
+The ground projection nodes projects the lines detected in the image frame onto the ground plane. This is useful so that we know the locations of the lines/lanes relative to the robot's coordinate frame, which can be used to calculate waypoints.
+
+####################################################################
+
+Question 3: For each element of the list, explain how this process is done and why is it done. Apart for evident processes like 2.1., your explanation should be detailed.
+
+1. Resize and crop: the resize is done via bilinear interpolation so that the size matches with the desired size, and the cropping is done to ignore uninteresting areas such as those above the horizon. This will also help in producing less noisy line features since we are ignoring almost half of the image, and speeds up processing speed.
+
+2. Setting image in line detector class: 
+
+    2a. Saving a BGR copy of the image: trivial - skipped
+
+    2b. Saving an HSV copy of the image: because HSV is known to be less sensitive to change in lighting, since it separates the intensity from the color components. This also makes it easier if we want to only work in the intensity space or the color space independently.
+
+    2c. Detecting the edges of the BGR image: uses Canny edge detector (the use of BGR is because OpenCV uses this image format as opposed to RGB). Canny works as the following. First the image is smoothened with Gaussian filter to remove unwanted noise like cracks that can be misdetected as lines, which will then followed by calculating the image gradient using Sobel. Then we apply non-maximum supression to only get some thin lines. We then apply hysteresis using two threshold values to produce continuous edges. If the gradient is larger than the upper threshold, the line is accepted. If lower than threshold, it is rejected.
+
+3. For each color in white, yellow, red], detect lines: 
+
+    3a. Get color filtered image: Some thresholding was done in HSV color space so we can get part of the image where the pixel values are within certain range. This is useful so we can pick colors that we are interested in (e.g., yellow lines).
+
+    3b. Dilate color filtered image:  dilation emphasizes features with bright color (i.e., white). This is useful to apply to the detected lines , especially since they are usually in grayscale, to make them more apparent. Further, this can also help to solidify the lines since it may cover the small holes between the detected lines. Dilation works by applying sliding window at each pixel location in the source image, and set the pixel value at that single location to be the maximum value within the window.
+
+    3c. Get color filtered edges: this is done by applying mask that we get from HSV filtering, so now we can get the edges that we only get edges that correspond to a specific color that we are interested in.
+
+    3d. Detect lines in color filtered edges: given the line features, Hough line transform is used to determine if they form a line. The output of Hough transform is line segments where each segment is represented as two end points in the image space. This algorithm works in the polar coordinate where line is represented as its distance from the origin and angle from the horizontal line. We can then plot a line that goes through some point (x,y) on (r,theta) axis, and if we do this to all the line features, we can perform what is called as Hough voting. If the lines intersects then we consider those features to belong to the same line.
+
+    3e. Compute normals and centers of these lines: we calculate the center points and the normals. The normals are useful so we can figure out the orientation of the line, and thus knowing how the robot should move. The center is useful for example as we did in the hardware exercise 2, to calculate the follow point in pure pursuit controller.
+
+4. Normalize the pixel coordinates and create segment list: to normalize the pixel coordinates we divide the (x,y) pixel coordinates with the image size ,i.e., (width,height), and by considering the cropping that we did in earlier step. We then add all the detected line segments and its coordinates into the segment list message to be published.
+
+####################################################################
+
+Question 4: NOTE: I picked option 1 (Replace all the small functions in category 1). Does it run well on the simulation? Describe and comment on the results.
+
+The new implementation runs OK in the simulation, although not as smooth as the OpenCV implementation. As discussed below, OpenCV implementation runs much faster compared to my implementation. We can see how some frames are dropped due to the slowness of the new implementation.
+
+####################################################################
+
+Question 5: Is it as fast as the original OpenCV code? Use the time Python library to compare the time does it take to process one image. If there is a difference, why is it the case?
+
+No, the new implementation is not as fast as the original OpenCV code. The time it took to process each frame is about 0.13 seconds. In contrast, OpenCV implementation only took about 1e-5 seconds. This is because OpenCV implementation is done mostly in C++, which is faster than Python. Furthermore, the main issue with my Python implementation without OpenCV is the use of for loops when doing dilation.
+
+####################################################################
+
+Question 6 Try it on the real robot, using the instructions given in Hardware Exercise 2. Does it work? Compare again the time that it takes to characterize an image on the RaspberryPi. Is it critical?
+
+The new implementation did not work well on the real robot since it takes about 0.8 seconds to 2.5 seconds to process each frame. This is too slow, and it was indeed observed that the response of the robot to be very slow. This is in contrast with the OpenCV implementation that only took about 0.001 to 0.03 seconds per frame. Thus, this is definitely a critical factor that needs to be considered when working with real robot.
+
+####################################################################
+
+Code: see sw_06_cv_functions.py
