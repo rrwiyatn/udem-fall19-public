@@ -1,0 +1,116 @@
+####################################################################
+Question 1: Take a look at the file src/lane_filter_node.py. 2 topic subscribers manage the direct inputs to the filter, and 4 publishers manage the outputs (including visualization). List these topics and describe shortly the information they transmit. Write your answer in a 07-state-estimation.txt file.
+
+Subscribers:
+1. self.sub = rospy.Subscriber("~segment_list", SegmentList, self.processSegments, queue_size=1)
+    This subscribes to the SegmentList message from `/default/ground_projection/lineseglist_out` topic, which is the list of line segments. Recall that the seglist is the list containing a set of detected line segments, where each segment includes the color of the lines (yellow, white, or red), the normalized pixel coordinates, the normals of the lines, and the points that make up the line segments. Here, all the lines in the list are already projected to the ground plane by the ground_projection node.
+
+2. self.sub_velocity = rospy.Subscriber("~car_cmd", Twist2DStamped, self.updateVelocity)
+    This subscribes to Twist2DStamped message from ~car_cmd topic, which indicates the current velocity of the vehicle.    
+        
+Publishers:
+1. self.pub_in_lane = rospy.Publisher("~in_lane",BoolStamped, queue_size=1)
+    This publishes BoolStamped message to ~in_lane topic to indicate whether the vehicle is within the lane or not
+
+2. self.pub_lane_pose = rospy.Publisher("~lane_pose", LanePose, queue_size=1)
+    This publishes LanePose message to ~lane_pose topic. This topic provides information regarding the detected lane. These include: the lateral offset, lateral offset reference, heading error, heading error reference, curvature, curvature reference, reference velocity, error indicator, and a boolean indicating whether the vehicle is within the lane or not.
+
+3. self.pub_belief_img = rospy.Publisher("~belief_img", Image, queue_size=1)
+    This publishes Image message to ~belief_img topic. This topic provides information about the belief of the filter. The image published is a grayscale image, where the intensity of each pixel represents the degree of the belief. This can also be used for visualization purposes, so that the user can visually see and the behavior of the filter. Note that the element of this image does not correspond to the spatial location in the image, but rather to a particular value of d and phi (i.e., a meshgrid of d and phi).
+
+4. self.pub_seglist_filtered = rospy.Publisher("~seglist_filtered",SegmentList, queue_size=1)
+    This publishes SegmentList message to ~seglist_filtered topic. Recall that the seglist is the list containing a set of detected line segments, where each segment includes the color of the lines (yellow, white, or red), the normalized pixel coordinates, the normals of the lines, and the points that make up the line segments. This publisher take the original seglist that the node subscribes to, and filter out the noisy ones, and publishes the filtered seglist.
+####################################################################
+
+####################################################################
+Question 2: How is the belief represented in the histogram filter? How is it initialized?
+
+The belief in histogram filter is represented as a matrix whose dimension depends on the number of all possible combinations between d and phi (i.e., a meshgrid). Each element in this matrix corresponds to a value that belong to a particular d and phi values. It is initialized as an empty array (i.e., array filled with arbitrary numbers).
+####################################################################
+
+####################################################################
+Question 3 Look at the measurement update function. Note that from a single segment, one can geometrically determine a corresponding (d, phi) pair through simple geometric considerations. This is done in the generateVote() function. Knowing this, describe shortly how is the likelihood p(z(t)|x(t)) computed.
+
+The measurement likelihood is computed by first collecting all the votes from all the given line segments (i.e., one line segment produces one vote). Here, the vote is in the form of d and phi values, where the votes are stored within a 2D matrix, where each element correspond to a specific d and phi values within the range of [d_min, d_max] and [phi_min,phi_max] (i.e., meshgrid of d and phi values). Concretely, given a line segment, we first calculate the value of d and phi for this segment, we then increment the element inside the meshgrid that corresponds to this d and phi values by 1 (i.e., increasing the vote by 1), and repeat this process for all the observed line segments. Once the voting process is finished, we calculate the likelihood by dividing the number of votes at each element in the meshgrid by the total number of votes.
+####################################################################
+
+####################################################################
+Question 4: In 07-state-estimation.txt file, describe your implementation for each of the 6 functions.
+
+1. Particle.predict():
+
+This is done by multiplying the delta time by the velocity, e.g., d = d + dt * v. However, since the heading of the vehicle is involved, we have to take it into account as it affects how the vehicle moves over time. In addition, since the motion model is not perfect, an additive noise was used. To take these into account, d is then calculated as d = d + dt * v * sin(phi) + noise. Similarly, phi is calculated as phi = phi + dt * omega + noise. Here, the noise is a gaussian noise where the variance equals to sigma_d and sigma_phi.
+
+2. Particle.update():
+
+To update the weights, I first calculate score for each particle based on the distance between each particle to all the measurements. It is important to note that the units for d and phi are different. Thus, we should normalize the distance of d and phi separately before calculating the total distance. To do this, the distance in d should be divided by the maximum possible difference in d. Similarly, the difference in phi should be divided by the maximum possible difference in phi. Finally, we want the weights to be larger when the distance is smaller. Thus, the weights should be inversely proportional to the total distance.
+
+In summary, first, we calculate the sum of the normalized distance between single particle to all the measurements. The weights for this particle is then calculated as w = 1 / sum_distance. We then repeat this process for each of the particles that we have.
+
+3. LaneFitlerParticle.initialize():
+
+I initialize the particles by sampling from the uniform distribution with weight equals to 1 since there is no strong reason to favor some particles without having any priors.
+
+4. LaneFitlerParticle.resample():
+
+To resample, I first normalized the weights. Since the normalized weights can be thought as the probability of the particle to be sampled. To sample the particles, we can use np.random.choice() function by passing the normalized weights as the sampling probability distribution.
+
+However, resampling the particles only from the current set of particles can be problematic if all the particles are bad. To mitigate this, I only resample some alpha percentage from the current set of particles, and (1 - alpha) percentage of total number particles are reinitialized from scratch (by sampling their d and phi from uniform distribution).
+
+5. LaneFitlerParticle.getEstimate()
+
+To get the estimate, I took the median of d and phi from all the particles, as this is more robust to outliers. I also implemented a second method by storing the normalized weights so that I can use them to calculate the weighted average of d and phi across all particles. Both of these methods seem to work fine.
+
+6. LaneFitlerParticle.isInLane()
+
+A way to do this is to construct the beliefArray like we did in histogram filter. In histogram filter, we created the beliefArray by considering all the (d,phi) that we get from each detected line segment. We can do similar thing by considering all the particles and put them into bins like we did in histogram filter. Once we get the beliefArray, we can do the exact same thing by checking if the maximum element in the belief array is larger than the min_max value. In my implementation however, I used the function getBeliefArray() that is already provided, and check if the maximum element in the beliefArray is above certain threshold value (i.e., the minimum maximal weight value).
+
+####################################################################
+
+####################################################################
+Question 5: Does it work? If not, describe and explain what is happening?
+
+Yes, it works really well in the simulation and successfully made the turns. Although looking from the belief image, we can see that there is always uncertainty which makes the movement of the robot less smooth. This however can be improved by tuning the parameters.
+
+####################################################################
+
+####################################################################
+Question 6: How is the particle filter able to deal with wrong line detections, due to Duckies in the image for example?
+
+Particle filter is able to handle this since the contribution of this outlier will be low if the number of measurements that correspond to duckies are not that many. It can be problematic however if there are many duckies in the image.
+
+####################################################################
+
+####################################################################
+Question 7: Would a particle filter be able to recover from a wrong estimation, or from an unexpected initial state? Which parameters have an influence here? What is the counterbalance of making the particle filter robust to such a possibility?
+
+Particle filter is sensitive to wrong estimation and unexpected initial state, especially when using Gaussian initialization since it is biased toward the center of the lane. This can be improved by initializing the particles from the uniform distribution instead. In addition, the resampling strategy has an influence here. For example, instead of resampling the particles only from the set of existing particles, we can instead sample 90% from the set of existing particles, and generate completely new particles for the other 10%. In my implementation, I used 80-20 and it seems to be more robust. Also, changing the variance in noise can also help to recover, although it may not help if the estimates are too far off.
+
+####################################################################
+
+####################################################################
+Question 8: Explain the influence of the number of particles. What is the limiting factor?
+
+The number of particles affect multiple things. First, increasing the number of particles will make computation to be more expensive since there are more particles to be evaluated, so this can be a limitation depending on the hardware used. Also, having more particles may result in slower response of the filter as the number of iterations needed for the particles to converge to the true state will increase. Having more particles also corresponds to better approximation of the true distribution that we are trying to estimate. It also increases robustness to outliers since the contribution of the weights that we get from non-outliers will be higher compared to the one we get from the outliers when we perform the state estimation.
+
+####################################################################
+
+####################################################################
+Question 9 Compare the particle filter to the histogram filter. What are the pros and cons of each? Could a Kalman filter work here?
+
+One of the strengths of particle filter is that it does not assume anything about probability distribution since we are using sampling based method, and does not assume about linearity, unlike Kalman filter. Also, compared to the histogram filter, particle filter will not suffer from discretization, depending on the implementation. However, this comes at the cost of computation and memory, and possibility of degenerating particles if the parameters are not picked correctly. Particle filter is also rather sensitive to initialization, wrong estimations , and other parameters (e.g., noise variance, roughening, etc.).
+
+The advantage of histogram filter is that it is even simpler to implement than particle filter and computationally more efficient. In histogram filter, however, the discretization step of the mesh grid can largely affect the voting. For example, we may have multiple bins with value of 4 but are close together, and a single bin with value of 5 that is further away from the bins with value of 4. If we only consider the bin with the highest vote, the bin with vote = 5 may win, although it would probably makes more sense to take the average of the multiple bins with 4 votes.
+
+Kalman filter is optimal if we are sure that we have linear system with Gaussian noise. In our case, the motion model is not linear (i.e., there is the phi term), so using Kalman filter may not be a good idea.
+
+####################################################################
+
+####################################################################
+BONUS Run the launch file on a real robot. Does it work? Describe. If there is a difference with the simulation: why is it so? What can you do to make it more robust?
+
+It works to certain extent, but not very robust. I also notice that the number of particles affect the performance drastically. Too many particles cause the robot to respond very slowly which cause the robot to not be able to make the turn at the right timing. In the attached video, only 50 particles were used. Please look at the video attached in this submission.
+
+I did not get a chance to optimize the parameters, but optimizing all the parameters in the real world will definitely make the performance better. Anothing thing that we can possibly do is to not performing resampling at every step (only resample particles when we need to).
+
+####################################################################
